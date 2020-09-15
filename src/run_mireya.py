@@ -16,6 +16,7 @@ __author__ = 'Anna Elizarova'
 __version__ = '1.1'
 __date__ = '23 October 2020'
 
+
 detection_mir_enh_interaction_methods = ['seed_match_needle', 'miranda', 'triplexator']
 MAX_PROC=3
 
@@ -118,7 +119,6 @@ def make_reverse_compl_fasta(in_path, out_path):
         output = open(out_path, 'w+')
         output.write(">%s\n%s\n" % (record.id, record.seq.reverse_complement()))
         output.close()
-
 
 # ------------------------------------------------------------------------------
 #   STEP 1
@@ -248,7 +248,6 @@ def calc_corr(args):
     print(' '.join(index_cmd))
     subprocess.run(index_cmd)
     print('Calculation is finished. Please find the results in ' + out_file_name)
-
 
 # ------------------------------------------------------------------------------
 #   STEP 3
@@ -537,6 +536,7 @@ def main():
         alignment_stats = get_best_aligned(args, needle_res)
         get_enh_best_aligned(args)
         prepare_final_result(alignment_stats, args)
+
 
 if __name__ == '__main__':
     start_time = time.time()
