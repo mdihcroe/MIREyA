@@ -53,3 +53,20 @@ LeaveMaxCorrs <- function(dt, by.cols, cols){
   dt.max[,`p.value`:=NULL]
   dt.max
 }
+
+ReadFilesPerMirna <- function(dir){
+  setwd(dir)
+  temp <- list.files(pattern="*.bed")
+  tables <- lapply(temp, fread)
+  names(tables) <-  temp
+  rm(temp)
+  setwd('../../../mirna.targets')
+  return(tables)
+}
+
+ConvertToDt <- function(list){
+  names(list) <- paste("Mir",
+                      tstrsplit(names(list),"_",fixed=TRUE)[[1]],
+                      sep="")
+  return(as.data.table(list_df2df(list, col1 = 'mirna')))
+}

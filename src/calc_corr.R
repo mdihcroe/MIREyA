@@ -21,7 +21,7 @@ mirnas.expr <- fread(mirnas.expr.path)
 enh.gene.assoc.sign <- fread(enh.gene.assoc.sign.path)
 
 if(method.enh == 'seeds'){
-  enh.filtered <- ReadFilesPerMirna(dir = file.path(out.dir, 'enh_with_seeds'))
+  enh.filtered <- ReadFilesPerMirna(dir = out.dir)
   
   enh.filtered <- ConvertToDt(enh.filtered)
   setnames(enh.filtered,

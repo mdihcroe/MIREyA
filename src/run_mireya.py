@@ -26,12 +26,18 @@ def read_params():
     p.add_argument('-m', '--mature_mirnas', type=str, default=None,
                    help='Path to a fasta file with sequences of mature miRNAs of interest (needed only if '
                         'the selected approach is miranda or triplexator')
-    p.add_argument('-s', '--seeds_mirnas', type=str, default=None,
-                   help='Path to a fasta file with sequences of seeds of miRNAs of interest (needed only if '
+    p.add_argument('-s', '--seeds_mirnas_forward', type=str, default=None,
+                   help='Path to a .tsv file with sequences of seeds of miRNAs of interest (needed only if '
                         'the selected approach is seed_match_needle')
+    p.add_argument('-sr', '--seeds_mirnas_reverse_compl', type=str, default=None,
+                   help='Path to a .tsv file with reverse complementary sequences of seeds of miRNAs '
+                        'of interest (needed only if the selected approach is seed_match_needle')
     p.add_argument('-g', '--genome', type=str, default=None,
                    help='Path to a folder with fasta files with complete genome of the organism of interest: '
                         'one chromosome per file (needed only if the selected approach is seed_match_needle')
+    p.add_argument('-eb', '--enhancers_bed', type=str, default=None,
+                   help='Path to a bed file with coordinates of enhancers of interest '
+                        '(needed only if the selected approach is seed_match_needle')
     p.add_argument('-ge', '--gene_expression', type=str, default=None,
                    help='Path to a .tsv file with gene expression')
     p.add_argument('-me', '--mirnas_expression', type=str, default=None,
@@ -161,6 +167,52 @@ def run_triplexator(args):
     print('Triplexator finished its work.')
 
 
+def check_seed_match_needle_specific_args(args):
+    if args.genome:
+        if not os.path.exists(args.genome):
+            sys.exit('ERROR: ' + args.genome + 'path does not exist.\n')
+        elif not os.listdir(args.genome):
+            sys.exit('ERROR: ' + args.genome + 'path is empty. Files with fasta per chromosome of genome of interest'
+                                               'are expected.\n')
+    else:
+        sys.exit('ERROR: Please provide a valid path of directory with fasta files with complete genome of the '
+                 'organism of interest: one chromosome per file (argument -g or --genome).\n')
+
+    if args.seeds_mirnas_forward:
+        if not os.path.exists(args.seeds_mirnas_forward):
+            sys.exit('ERROR: .tsv file with mirna seed forward sequences (' + args.seeds_mirnas_forward + ') '
+                                                                                                          'not found\n')
+    else:
+        sys.exit('ERROR: Please provide a valid .tsv file with mirna seed forward sequences'
+                 ' (argument -s or --seeds_mirnas_forward).\n')
+
+    if args.seeds_mirnas_reverse_compl:
+        if not os.path.exists(args.seeds_mirnas_reverse_compl):
+            sys.exit('ERROR: .tsv file with mirna seed reverse complementary sequences (' +
+                     args.seeds_mirnas_reverse_compl + ') not found\n')
+    else:
+        sys.exit('ERROR: Please provide a valid .tsv file with mirna seed reverse complementary sequences'
+                 ' (argument -sr or --seeds_mirnas_reverse_compl).\n')
+
+    if args.enhancers_bed:
+        if not os.path.exists(args.enhancers_bed):
+            sys.exit('ERROR: .bed file with enhancer coordinates (' +
+                     args.enhancers_bed + ') not found\n')
+    else:
+        sys.exit('ERROR: Please provide a valid .bed file with enhancer coordinates'
+                 ' (argument -eb or --enhancers_bed).\n')
+
+
+def run_seed_match_needle(args):
+    print('Searching enhancers which contain exact match of provided seeds...')
+    index_cmd = ['bash', 'src/get_enh_with_seeds.sh', args.genome, args.seeds_mirnas_forward, args.seeds_mirnas_reverse_compl,
+                 args.output, args.enhancers_bed]
+    print(' '.join(index_cmd))
+    subprocess.run(index_cmd)
+    print("Finished searching for enhancers with miRNAs' seeds sequences.")
+    pass
+
+
 # ------------------------------------------------------------------------------
 #   STEP 2
 # ------------------------------------------------------------------------------
@@ -197,7 +249,9 @@ def main():
     print('\nSTEP 1. Detect miRNA:enhancer interaction...')
 
     if args.detection_mir_enh_interaction == 'seed_match_needle':
-        print('Searching enhancers which contain exact match of provided seeds...')
+        check_seed_match_needle_specific_args(args)
+        tool_installed('bedtools')
+        run_seed_match_needle(args)
     elif args.detection_mir_enh_interaction == 'miranda':
         check_mature_mirnas(args)
         tool_installed('miranda')
