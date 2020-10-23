@@ -3,11 +3,14 @@
 import os
 import sys
 import time
+import shutil
 import subprocess
 import argparse as ap
 from pathlib import Path
-from shutil import which
 import pandas as pd
+from Bio import SeqIO
+from Bio.Emboss.Applications import NeedleCommandline
+from shutil import which
 
 __author__ = 'Anna Elizarova'
 __version__ = '1.1'
@@ -37,6 +40,12 @@ def read_params():
                         'one chromosome per file (needed only if the selected approach is seed_match_needle')
     p.add_argument('-eb', '--enhancers_bed', type=str, default=None,
                    help='Path to a bed file with coordinates of enhancers of interest '
+                        '(needed only if the selected approach is seed_match_needle')
+    p.add_argument('-ms', '--mature_mirnas_separate', type=str, default=None,
+                   help='Path to a directory containing directories with mature miRNA sequences per one miRNA.'
+                        'Each directory with mature mirna fastas should be names exactly as you name your miRNA '
+                        'in other input files. Names of fasta files are not important, but will be used further as '
+                        '"mature_mirna" column in result tables'
                         '(needed only if the selected approach is seed_match_needle')
     p.add_argument('-ge', '--gene_expression', type=str, default=None,
                    help='Path to a .tsv file with gene expression')
@@ -102,6 +111,13 @@ def tool_installed(name):
         print('\nERROR: ' + name + ' was not found in PATH and marked as executable. '
                                    'Please, install it as described in README.\n')
         sys.exit()
+
+
+def make_reverse_compl_fasta(in_path, out_path):
+    for record in SeqIO.parse(in_path, "fasta"):
+        output = open(out_path, 'w+')
+        output.write(">%s\n%s\n" % (record.id, record.seq.reverse_complement()))
+        output.close()
 
 
 # ------------------------------------------------------------------------------
@@ -202,6 +218,16 @@ def check_seed_match_needle_specific_args(args):
         sys.exit('ERROR: Please provide a valid .bed file with enhancer coordinates'
                  ' (argument -eb or --enhancers_bed).\n')
 
+    if args.mature_mirnas_separate:
+        if not os.path.exists(args.mature_mirnas_separate):
+            sys.exit('ERROR: ' + args.mature_mirnas_separate + 'path does not exist.\n')
+        elif not os.listdir(args.mature_mirnas_separate):
+            sys.exit('ERROR: ' + args.mature_mirnas_separate +
+                     'path is empty.')
+    else:
+        sys.exit('ERROR: Please provide a valid path of directory with directories per miRNA with fasta files with '
+                 'one sequence of mature miRNA per fasta (argument -ms or --mature_mirnas_separate).\n')
+
 
 def run_seed_match_needle(args):
     print('Searching enhancers which contain exact match of provided seeds...')
@@ -210,7 +236,6 @@ def run_seed_match_needle(args):
     print(' '.join(index_cmd))
     subprocess.run(index_cmd)
     print("Finished searching for enhancers with miRNAs' seeds sequences.")
-    pass
 
 
 # ------------------------------------------------------------------------------
@@ -224,9 +249,187 @@ def calc_corr(args):
     subprocess.run(index_cmd)
     print('Calculation is finished. Please find the results in ' + out_file_name)
 
+
 # ------------------------------------------------------------------------------
 #   STEP 3
 # ------------------------------------------------------------------------------
+def get_active_enh_regions(args):
+    print('Extracting sequences of "active" regions of enhancers (the ones that align '
+          'to miRNAs in seed region +- 14bp)...')
+    index_cmd = ['bash', 'src/get_active_regions.sh', args.output, args.genome]
+    print(' '.join(index_cmd))
+    subprocess.run(index_cmd)
+    print("Finished searching for enhancers with miRNAs' seeds sequences.")
+
+
+def sort_fasta_by_seed(args):
+    active_regions_path = os.path.join(args.output, 'enh_active/active_regions/fasta')
+    out_dir = os.path.join(active_regions_path, 'fasta_sorted')
+
+    seeds_dict = dict()
+
+    i = 0
+    with open(args.seeds_mirnas_forward) as seeds_forward:
+        for seed in seeds_forward:
+            mirna = seed.split()[0]
+            print(mirna)
+            mirna_seed_seq = seed.split()[1]
+            seeds_dict[mirna + '_' + str(i)] = mirna_seed_seq
+            i += 1
+
+    i = 0
+    with open(args.seeds_mirnas_reverse_compl) as seeds_rev_compl:
+        for seed in seeds_rev_compl:
+            mirna = seed.split()[0]
+            print(mirna)
+            mirna_seed_seq = seed.split()[1]
+            seeds_dict[mirna + '_rev_compl_' + str(i)] = mirna_seed_seq
+            i += 1
+
+    if os.path.exists(out_dir) and os.path.isdir(out_dir):
+        shutil.rmtree(out_dir)
+    os.makedirs(out_dir)
+
+    for filename in os.listdir(active_regions_path):
+        file_path = os.path.join(active_regions_path, filename)
+        if os.path.isfile(file_path):
+            for record in SeqIO.parse(file_path, "fasta"):
+                mirna_filename = filename.split('_')[0]
+                print(mirna_filename)
+                for mirna_name, mirna_seed in seeds_dict.items():
+                    mirna_name_from_dict = mirna_name.split('_')[0].split('-')[0]
+                    if mirna_name_from_dict == mirna_filename and mirna_seed in record.seq:
+                        mir_name = "_".join(mirna_name.split('_')[:-1])
+                        output = open(os.path.join(out_dir, mir_name), 'a')
+                        output.write(">%s\n%s\n" % (record.id, record.seq))
+                        output.close()
+
+
+def align_needle(args):
+    fasta_dir = os.path.join(args.output, 'enh_active/active_regions/fasta')
+    fastas_sorted_dir = os.path.join(fasta_dir, 'fasta_sorted/')
+    fasta_sorted_one_per_file_dir = os.path.join(fasta_dir, 'one_per_file')
+    alignments_dir = os.path.join(args.output, 'alignments_needle')
+
+    # if os.path.exists(fasta_sorted_one_per_file_dir) and os.path.isdir(fasta_sorted_one_per_file_dir):
+    #     shutil.rmtree(fasta_sorted_one_per_file_dir)
+    # os.makedirs(fasta_sorted_one_per_file_dir)
+
+    print('Preparing all outputs as separate fasta files...')
+    for fasta_sorted in os.listdir(fastas_sorted_dir):
+        fasta_sorted_one_per_file = os.path.join(fasta_sorted_one_per_file_dir, fasta_sorted)
+        fasta_sorted_path = os.path.join(fastas_sorted_dir, fasta_sorted)
+        if os.path.exists(fasta_sorted_one_per_file) and os.path.isdir(fasta_sorted_one_per_file):
+            shutil.rmtree(fasta_sorted_one_per_file)
+        os.makedirs(fasta_sorted_one_per_file)
+        for record in SeqIO.parse(fasta_sorted_path, "fasta"):
+            new_file = os.path.join(fasta_sorted_one_per_file, fasta_sorted + '_' + record.id.replace(':', '_'))
+            output = open(new_file, 'w')
+            output.write(">%s\n%s\n" % (record.id, record.seq))
+            output.close()
+
+    print('getting reverse complementary sequences for the mature mirnas...')
+    mature_seqs_rev_compl_path = os.path.join(args.output, 'mature_seqs_rev_compl')
+    if os.path.exists(mature_seqs_rev_compl_path) and os.path.isdir(mature_seqs_rev_compl_path):
+        shutil.rmtree(mature_seqs_rev_compl_path)
+    os.makedirs(mature_seqs_rev_compl_path)
+
+    for mir_dir in os.listdir(args.mature_mirnas_separate):
+        rev_compl_dir_per_mir = os.path.join(mature_seqs_rev_compl_path, mir_dir)
+        mature_seqs_path = os.path.join(args.mature_mirnas_separate, mir_dir)
+        if os.path.exists(rev_compl_dir_per_mir) and \
+                os.path.isdir(rev_compl_dir_per_mir):
+            shutil.rmtree(rev_compl_dir_per_mir)
+        os.makedirs(rev_compl_dir_per_mir)
+        for file in os.listdir(mature_seqs_path):
+            make_reverse_compl_fasta(in_path=os.path.join(mature_seqs_path, file),
+                                     out_path=os.path.join(rev_compl_dir_per_mir, file))
+
+    print('perform alignments each mirna vs each of possibly active regions')
+    if os.path.exists(alignments_dir) and os.path.isdir(alignments_dir):
+        shutil.rmtree(alignments_dir)
+    os.makedirs(alignments_dir)
+
+    mirna_names = [x for x in os.listdir(fasta_sorted_one_per_file_dir) if 'rev_compl' not in x]
+    for mirna in mirna_names:
+        print(mirna)
+        mature_mirna_dir = os.path.join(args.mature_mirnas_separate, mirna)
+        one_mir_mature_seqs_rev_compl_path = os.path.join(mature_seqs_rev_compl_path, mirna)
+        print('mature_mirna_dir: ', mature_mirna_dir)
+        active_regions_path = os.path.join(fasta_sorted_one_per_file_dir, mirna)
+        print('active_regions_path: ', active_regions_path)
+        out_alignments_per_mirna_dir = os.path.join(alignments_dir, mirna)
+        print('out_alignments_per_mirna_dir: ', out_alignments_per_mirna_dir)
+
+        if os.path.exists(out_alignments_per_mirna_dir) and os.path.isdir(out_alignments_per_mirna_dir):
+            shutil.rmtree(out_alignments_per_mirna_dir)
+        os.makedirs(out_alignments_per_mirna_dir)
+
+        for active_region in os.listdir(active_regions_path):
+            active_region_path = os.path.join(active_regions_path, active_region)
+            for one_mature_mirna_file in os.listdir(mature_mirna_dir):
+                out_alignment = os.path.join(out_alignments_per_mirna_dir, active_region + '_' +
+                                             one_mature_mirna_file + "_needle.txt")
+                needle_cline = NeedleCommandline(asequence=os.path.join(mature_mirna_dir, one_mature_mirna_file),
+                                                 bsequence=active_region_path,
+                                                 gapopen=50, gapextend=0.5,
+                                                 datafile='EBLOSUM62',
+                                                 outfile=out_alignment)
+                stdout, stderr = needle_cline()
+
+                out_alignment = os.path.join(out_alignments_per_mirna_dir, active_region + '_' +
+                                             one_mature_mirna_file + "rev_compl_needle.txt")
+                needle_cline = NeedleCommandline(asequence=os.path.join(one_mir_mature_seqs_rev_compl_path,
+                                                                        one_mature_mirna_file),
+                                                 bsequence=active_region_path,
+                                                 gapopen=50, gapextend=0.5,
+                                                 datafile='EBLOSUM62',
+                                                 outfile=out_alignment)
+                stdout, stderr = needle_cline()
+
+    def get_num_ident_nucl(out_alignment):
+        with open(out_alignment) as f:
+            for i, line in enumerate(f):
+                if i == 25:
+                    num_ident_nucl = int(line.split('/')[0].split()[2])
+        return num_ident_nucl
+
+    def get_mirna_length(mirna_path):
+        for record in SeqIO.parse(mirna_path, "fasta"):
+            return len(record.seq)
+
+    def get_percent_identity(alignment_path, mirna_path):
+        res = float(get_num_ident_nucl(alignment_path)) / get_mirna_length(mirna_path)
+        return round(res, 2)
+
+    print('extract percent identities from outputs')
+    pi_df = pd.DataFrame(columns=['mirna', 'mature_mirna', 'active region', 'PI'])
+    for mirna in os.listdir(alignments_dir):
+        print('mirna: ', mirna)
+        mature_mirna_path = os.path.join(args.mature_mirnas_separate, mirna)
+        print('mature_mirna_path: ', mature_mirna_path)
+        alignments_per_mirna_path = os.path.join(alignments_dir, mirna)
+        print('alignments_per_mirna_path: ', alignments_per_mirna_path)
+        for active_region_aligned in os.listdir(alignments_per_mirna_path):
+            active_region_chr_corr = ':'.join(active_region_aligned.replace('rev_compl_', '').split('_')[1:3])
+            print('active_region_chr_corr: ', active_region_chr_corr)
+            active_region_aligned_path = os.path.join(alignments_per_mirna_path, active_region_aligned)
+            print('active_region_aligned_path: ', active_region_aligned_path)
+            for one_mature_mir in os.listdir(mature_mirna_path):
+                print('one_mature_mir: ', one_mature_mir)
+                PI = get_percent_identity(active_region_aligned_path,
+                                          os.path.join(mature_mirna_path, one_mature_mir))
+                PI_new = pd.DataFrame({'mirna': [mirna],
+                                       'mature_mirna': [one_mature_mir],
+                                       'active region': [active_region_chr_corr],
+                                       'PI': [PI]
+                                       })
+                pi_df = pi_df.append(PI_new, ignore_index=True)
+    pi_df = pi_df.sort_values(by=['PI'], ascending=False)
+    print(pi_df)
+    pi_df.to_csv(os.path.join(alignments_dir, 'stats.csv'),
+                 sep='\t',
+                 index=False)
 
 
 # ------------------------------------------------------------------------------
@@ -272,6 +475,9 @@ def main():
 
     if args.detection_mir_enh_interaction == 'seed_match_needle':
         print('Aligning the rest of mature miRNA to the enhancers which contain exact seed...')
+        get_active_enh_regions(args)
+        sort_fasta_by_seed(args)
+        align_needle(args)
 
 
 if __name__ == '__main__':
