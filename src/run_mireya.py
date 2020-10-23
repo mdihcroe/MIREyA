@@ -11,7 +11,7 @@ import pandas as pd
 
 __author__ = 'Anna Elizarova'
 __version__ = '1.1'
-__date__ = '20 September 2020'
+__date__ = '23 October 2020'
 
 detection_mir_enh_interaction_methods = ['seed_match_needle', 'miranda', 'triplexator']
 MAX_PROC=3
@@ -45,7 +45,7 @@ def read_params():
     p.add_argument('-ei', '--enh_gene_interaction', type=str, default=None,
                    help='Path to a .tsv file with enhancers and corresponding genes you believe they regulate')
     p.add_argument('-o', '--output', type=str, default=None,
-                   help='Path to output directory')
+                   help='Full path to output directory')
     p.add_argument('--nproc', type=int, default=MAX_PROC,
                    help='Maximum number of processors to use. Default is 3 or a lower number of available processors.')
     return p.parse_args()
@@ -71,7 +71,7 @@ def check_main_args(args):
         if not os.path.exists(str(output_parent_dir)):
             sys.exit('ERROR:' + output_parent_dir + ' directory not found\n')
     else:
-        sys.exit('ERROR: Please provide a valid output directory (argument -o or --output).\n')
+        sys.exit('ERROR: Please provide a valid full path to output directory (argument -o or --output).\n')
 
     if args.gene_expression:
         if not os.path.exists(args.gene_expression):

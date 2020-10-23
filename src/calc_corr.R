@@ -1,4 +1,5 @@
 library(data.table)
+library(R.utils)
 source('src/func.R')
 
 
@@ -11,16 +12,15 @@ gene.expr.path <- commandArgs(T)[3]
 mirnas.expr.path <- commandArgs(T)[4]
 enh.gene.assoc.sign.path <- commandArgs(T)[5]
 
-if(!file.exists(gene.expr.path)){
-  print('gene.expr.path does not exist. Please provide valid full path to the file with -ge or --gene_expression argument')
-  stop("Not enough observations in 'x': n < 500")
+if (!isAbsolutePath(out.dir)){
+  out.dir <- file.path(getwd(), out.dir)
 }
 
 gene.expr <- fread(gene.expr.path)
 mirnas.expr <- fread(mirnas.expr.path)
 enh.gene.assoc.sign <- fread(enh.gene.assoc.sign.path)
 
-if(method.enh == 'seeds'){
+if(method.enh == 'seed_match_needle'){
   enh.filtered <- ReadFilesPerMirna(dir = out.dir)
   
   enh.filtered <- ConvertToDt(enh.filtered)
@@ -57,7 +57,28 @@ trio.dt <- GetSignifCorrsAllMirnasVsAllGenes(enh.filtered,
                                              corrs.all,
                                             alpha
                                             )
-trio.dt <- PrepareAllCorrsTable(trio.dt, get.max=T)
-write.table(trio.dt,
+trio.dt.prepared <- PrepareAllCorrsTable(trio.dt, get.max=T)
+write.table(trio.dt.prepared,
             file.path(out.dir, 'mir_enh_gene_trios.tsv'),
             sep = '\t', quote = F, row.names = F)
+
+
+if(method.enh == 'seed_match_needle'){
+    out.dir.enh.active <- file.path(out.dir, 'enh_active')
+    dir.create(out.dir.enh.active, showWarnings = FALSE)
+
+    enh.active.bed <- sapply (unique(trio.dt$mirna), function(de.mirna){
+      print(de.mirna)
+      as.data.table(unique(trio.dt[mirna == de.mirna, c('enh.chr', 'enh.start', 'enh.end')]))
+    }, simplify = F, USE.NAMES = T)
+
+    lapply(names(enh.active.bed), function(de.mirna){
+      write.table(enh.active.bed[[de.mirna]],
+                  file.path(out.dir.enh.active, paste0(de.mirna, '_enh_active.bed')),
+                  quote = F,
+                  col.names = F,
+                  row.names = F,
+                  sep = '\t')
+    })
+
+}

@@ -1,3 +1,5 @@
+require(qdapTools)
+
 CalcCorrWithMirna <- function(expr.per.gene, mirnas.expr.list){
   mirna <- expr.per.gene$mirna
   cor.res <- cor.test(as.numeric(mirnas.expr.list[[mirna]][, -c('Symbol')]),
@@ -65,8 +67,6 @@ ReadFilesPerMirna <- function(dir){
 }
 
 ConvertToDt <- function(list){
-  names(list) <- paste("Mir",
-                      tstrsplit(names(list),"_",fixed=TRUE)[[1]],
-                      sep="")
+  names(list) <- tstrsplit(names(list),"_",fixed=TRUE)[[1]]
   return(as.data.table(list_df2df(list, col1 = 'mirna')))
 }
