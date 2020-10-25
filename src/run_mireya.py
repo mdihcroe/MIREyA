@@ -405,18 +405,12 @@ def align_needle(args):
     print('extract percent identities from outputs')
     pi_df = pd.DataFrame(columns=['mirna', 'mature_mirna', 'active region', 'PI'])
     for mirna in os.listdir(alignments_dir):
-        print('mirna: ', mirna)
         mature_mirna_path = os.path.join(args.mature_mirnas_separate, mirna)
-        print('mature_mirna_path: ', mature_mirna_path)
         alignments_per_mirna_path = os.path.join(alignments_dir, mirna)
-        print('alignments_per_mirna_path: ', alignments_per_mirna_path)
         for active_region_aligned in os.listdir(alignments_per_mirna_path):
             active_region_chr_corr = ':'.join(active_region_aligned.replace('rev_compl_', '').split('_')[1:3])
-            print('active_region_chr_corr: ', active_region_chr_corr)
             active_region_aligned_path = os.path.join(alignments_per_mirna_path, active_region_aligned)
-            print('active_region_aligned_path: ', active_region_aligned_path)
             for one_mature_mir in os.listdir(mature_mirna_path):
-                print('one_mature_mir: ', one_mature_mir)
                 PI = get_percent_identity(active_region_aligned_path,
                                           os.path.join(mature_mirna_path, one_mature_mir))
                 PI_new = pd.DataFrame({'mirna': [mirna],
@@ -426,10 +420,72 @@ def align_needle(args):
                                        })
                 pi_df = pi_df.append(PI_new, ignore_index=True)
     pi_df = pi_df.sort_values(by=['PI'], ascending=False)
-    print(pi_df)
     pi_df.to_csv(os.path.join(alignments_dir, 'stats.csv'),
                  sep='\t',
                  index=False)
+    return pi_df
+
+
+def get_best_aligned(args, needle_res):
+    threshold = 0.5  # 12/22 seen an example in TargetScan but it gives 45 results; let's take less
+    needle_res = needle_res[needle_res['PI'] >= threshold].reset_index()
+    chr_coord_df = pd.DataFrame(needle_res['active region'].str.split(':', 1).tolist(),
+                                columns=['chr', 'coord'])
+    start_end_df = pd.DataFrame(chr_coord_df['coord'].str.split('-', 1).tolist(),
+                                columns=['start', 'end'])
+    needle_res['chr'] = chr_coord_df['chr']
+    needle_res = pd.concat([needle_res, start_end_df], axis=1)[['chr', 'start', 'end', 'mirna', 'mature_mirna', 'PI']]
+    needle_res = needle_res.drop_duplicates()
+    needle_res[['chr', 'start', 'end']].to_csv(os.path.join(args.output, 'alignments_needle',
+                                                            'alignment_best_regions.bed'),
+                                               sep='\t',
+                                               index=False,
+                                               header=False)
+    needle_res.to_csv(os.path.join(args.output, 'alignment_stats.tsv'), sep='\t', index=False)
+    return needle_res
+
+
+def get_enh_best_aligned(args):
+    index_cmd = ['bash', 'src/get_enh_best_aligned.sh', args.output]
+    print(' '.join(index_cmd))
+    subprocess.run(index_cmd)
+
+
+def prepare_final_result(alignment_stats, args):
+    output_al_needle = os.path.join(args.output, 'alignments_needle/')
+    enh_best_aligned_path = os.path.join(output_al_needle, 'alignment_best_enh.bed')
+    enh_best_aligned = pd.read_csv(enh_best_aligned_path, '\t', header=None)
+    enh_best_aligned.rename(columns={0: 'chr', 1: 'start', 2: 'end'}, inplace=True)
+    enh_best_aligned['enhancer'] = enh_best_aligned['chr'].astype(str) + ':' + enh_best_aligned['start'].astype(
+        str) + '-' + enh_best_aligned['end'].astype(str)
+    enh_best_aligned = enh_best_aligned[[3, 4, 5, 'enhancer']]
+    enh_best_aligned.rename(columns={3: 'chr', 4: 'start', 5: 'end'}, inplace=True)
+
+    alignment_stats['chr'] = alignment_stats.chr.astype('str')
+    alignment_stats['start'] = alignment_stats.start.astype('int64')
+    alignment_stats['end'] = alignment_stats.end.astype('int64')
+    enh_best_aligned['chr'] = enh_best_aligned.chr.astype('str')
+    enh_best_aligned['start'] = enh_best_aligned.start.astype('int64')
+    enh_best_aligned['end'] = enh_best_aligned.end.astype('int64')
+
+    res = pd.merge(alignment_stats,
+                   enh_best_aligned,
+                   how='left',
+                   on=['chr', 'start', 'end'])
+
+    all_corrs = pd.read_csv(os.path.join(args.output, 'mir_enh_gene_trios.tsv'), '\t')
+    res['mirna'] = res['mirna'].astype(str)
+    res['enhancer'] = res['enhancer'].astype(str)
+    all_corrs['mirna'] = all_corrs['mirna'].astype(str)
+    all_corrs['enhancer'] = all_corrs['enhancer'].astype(str)
+
+    res = pd.merge(res,
+                   all_corrs,
+                   how='left',
+                   on=['mirna', 'enhancer'])
+    res = res[['mirna', 'mature_mirna', 'Gene.Name', 'enhancer', 'corr(miRNA, gene)',
+               'p.value adj', 'PI']].drop_duplicates()
+    res.to_csv(os.path.join(args.output, 'mir_enh_gene_trios.tsv'), '\t', index=False)
 
 
 # ------------------------------------------------------------------------------
@@ -477,8 +533,10 @@ def main():
         print('Aligning the rest of mature miRNA to the enhancers which contain exact seed...')
         get_active_enh_regions(args)
         sort_fasta_by_seed(args)
-        align_needle(args)
-
+        needle_res = align_needle(args)
+        alignment_stats = get_best_aligned(args, needle_res)
+        get_enh_best_aligned(args)
+        prepare_final_result(alignment_stats, args)
 
 if __name__ == '__main__':
     start_time = time.time()
