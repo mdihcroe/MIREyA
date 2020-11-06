@@ -1,6 +1,4 @@
 # MIREyA (MIRnas functioning through Enhancer Activation)
-the description is not complete yet
-
 
 This is a pipeline for detection of miRNAs and their gene targets up-regulated through triggering their enhancer in the provided expression dataset (as in [Xiao et al., 2017](https://www.tandfonline.com/doi/full/10.1080/15476286.2015.1112487)). It runs in three different modes:
 1. Searching for enhancers containing an exact match of the user-provided seed sequence of a miRNA, then expanding each seed by 14 bp of the corresponding mature miRNA and aligning it to the enhancer with Needle tool and keeping only enhancers with the percent identity (PI) > 0.5 (PI defined as a percent of matches between miRNA and DNA region). 
