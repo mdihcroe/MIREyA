@@ -72,6 +72,16 @@ ConvertToDt <- function(list){
   return(as.data.table(list_df2df(list, col1 = 'mirna')))
 }
 
+PrepareTriplexatorOutput <- function(dt){
+  dt <- SplitRegionColumn(dt = dt[,1:2],
+                          region.col = colnames(dt)[1])
+  dt[, `Sequence-ID`:=RenameLongMirnaName(column = `Sequence-ID`)]
+  setnames(dt, colnames(dt),
+           c('mirna', 'enh.chr', 'enh.start', 'enh.end'))
+  dt$enh.start <- as.numeric(dt$enh.start)
+  dt$enh.end <- as.numeric(dt$enh.end)
+  return(dt)
+}
 SplitRegionColumn <- function(dt, region.col){
   dt[, c("chr", 'coord') := tstrsplit(get(region.col), ":", fixed=TRUE)]
   dt[, c("start", 'end') := tstrsplit(`coord`, "-", fixed=TRUE)]
