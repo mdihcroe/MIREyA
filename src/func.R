@@ -96,3 +96,27 @@ PrepareTriplexatorOutput <- function(dt){
   dt$enh.end <- as.numeric(dt$enh.end)
   return(dt)
 }
+SplitRegionColumn <- function(dt, region.col){
+  dt[, c("chr", 'coord') := tstrsplit(get(region.col), ":", fixed=TRUE)]
+  dt[, c("start", 'end') := tstrsplit(`coord`, "-", fixed=TRUE)]
+  dt <- unique(dt[, -c('coord', region.col), with=F])
+  return(dt)
+}
+
+RenameLongMirnaName <- function(column){
+  # converts 'mmu-miR-223-3p' style into 'Mir223'
+  res <- str_replace(column, 'mmu-miR-', '')
+  res <- paste0('Mir', sub('-.*', '', res))
+  return(res)
+}
+
+PrepareTriplexatorOutput <- function(dt){
+  dt <- SplitRegionColumn(dt = dt[,1:2],
+                          region.col = colnames(dt)[1])
+  dt[, `Sequence-ID`:=RenameLongMirnaName(column = `Sequence-ID`)]
+  setnames(dt, colnames(dt),
+           c('mirna', 'enh.chr', 'enh.start', 'enh.end'))
+  dt$enh.start <- as.numeric(dt$enh.start)
+  dt$enh.end <- as.numeric(dt$enh.end)
+  return(dt)
+}
