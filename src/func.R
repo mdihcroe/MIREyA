@@ -123,7 +123,7 @@ RenameLongMirnaName <- function(column){
 PrepareTriplexatorOutput <- function(dt){
   dt <- SplitRegionColumn(dt = dt[,1:2],
                           region.col = colnames(dt)[1])
-  dt[, `Sequence-ID`:=RenameLongMirnaName(column = `Sequence-ID`)]
+  dt[, V2:=RenameLongMirnaName(column = V2)]
   setnames(dt, colnames(dt),
            c('mirna', 'enh.chr', 'enh.start', 'enh.end'))
   dt$enh.start <- as.numeric(dt$enh.start)

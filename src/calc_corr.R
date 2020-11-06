@@ -33,7 +33,7 @@ if(method.enh == 'seed_match_needle'){
   enh.filtered <- unique(enh.filtered[,-c('max.energy', 'max.score')])
 }else if(method.enh == 'triplexator'){
   enh.triplexator.path <- file.path(out.dir, 'triplex_search.summary')
-  enh.filtered <- fread(enh.triplexator.path)[,-c('V11')]
+  enh.filtered <- fread(enh.triplexator.path, header = F)[,-c('V11')]
   enh.filtered <- PrepareTriplexatorOutput(dt = enh.filtered)
 }
 
