@@ -172,11 +172,11 @@ def parse_miranda_output(args):
 
 
 def run_triplexator(args):
-    error_rate = 19
-    lower_length_bound = 11
-    index_cmd = ['triplexator', '-ss', args.mature_mirnas, '-ds', args.enhancers, '-p', args.nproc,
+    error_rate = '19'
+    lower_length_bound = '11'
+    index_cmd = ['triplexator', '-ss', args.mature_mirnas, '-ds', args.enhancers, '-p', str(args.nproc),
                  '--error-rate', error_rate, '--lower-length-bound', lower_length_bound, '-od', args.output]
-    print(' '.join(index_cmd))
+    print(index_cmd)
     subprocess.run(index_cmd)
     index_cmd = ['sed', '-i', '"s/GT (rel)/GT (rel)	/g"', os.path.join(args.output, "triplex_search.summary")]
     subprocess.run(index_cmd)
