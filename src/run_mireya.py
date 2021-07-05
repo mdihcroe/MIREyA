@@ -398,7 +398,7 @@ def align_needle(args):
             return len(record.seq)
 
     def get_percent_identity(alignment_path, mirna_path):
-        res = float(get_num_ident_nucl(alignment_path)) / get_mirna_length(mirna_path)
+        res = 100*float(get_num_ident_nucl(alignment_path)) / get_mirna_length(mirna_path)
         return round(res, 2)
 
     print('extract percent identities from outputs')
