@@ -57,13 +57,13 @@ LeaveMaxCorrs <- function(dt, by.cols, cols){
   dt.max
 }
 
-ReadFilesPerMirna <- function(dir){
-  setwd(dir)
+ReadFilesPerMirna <- function(out.dir, cur.dir){
+  setwd(out.dir)
   temp <- list.files(pattern="*.bed")
   tables <- lapply(temp, fread)
   names(tables) <-  temp
   rm(temp)
-  setwd('../../../mirna.targets')
+  setwd(cur.dir)
   return(tables)
 }
 
