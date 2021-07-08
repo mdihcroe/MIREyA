@@ -13,8 +13,8 @@ from Bio.Emboss.Applications import NeedleCommandline
 from shutil import which
 
 __author__ = 'Anna Elizarova'
-__version__ = '1.1'
-__date__ = '23 October 2020'
+__version__ = '1.3'
+__date__ = '7 July 2021'
 
 
 detection_mir_enh_interaction_methods = ['seed_match_needle', 'miranda', 'triplexator']
@@ -247,7 +247,8 @@ def calc_corr(args):
                  args.mirnas_expression, args.enh_gene_interaction]
     print(' '.join(index_cmd))
     subprocess.run(index_cmd)
-    print('Calculation is finished. Please find the results in ' + out_file_name)
+    if args.detection_mir_enh_interaction != 'seed_match_needle':
+        print('Calculation is finished. Please find the results in ' + out_file_name)
 
 # ------------------------------------------------------------------------------
 #   STEP 3
@@ -485,6 +486,7 @@ def prepare_final_result(alignment_stats, args):
     res = res[['mirna', 'mature_mirna', 'Gene.Name', 'enhancer', 'corr(miRNA, gene)',
                'p.value adj', 'PI']].drop_duplicates()
     res.to_csv(os.path.join(args.output, 'mir_enh_gene_trios.tsv'), '\t', index=False)
+    print('Calculation is finished. Please find the results in ' + os.path.join(args.output, 'mir_enh_gene_trios.tsv'))
 
 
 # ------------------------------------------------------------------------------

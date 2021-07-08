@@ -21,7 +21,7 @@ mirnas.expr <- fread(mirnas.expr.path)
 enh.gene.assoc.sign <- fread(enh.gene.assoc.sign.path)
 
 if(method.enh == 'seed_match_needle'){
-  enh.filtered <- ReadFilesPerMirna(dir = out.dir)
+  enh.filtered <- ReadFilesPerMirna(out.dir = out.dir, cur.dir = getwd())
   
   enh.filtered <- ConvertToDt(enh.filtered)
   setnames(enh.filtered,
