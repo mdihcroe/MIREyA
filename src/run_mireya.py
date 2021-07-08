@@ -124,6 +124,7 @@ def make_reverse_compl_fasta(in_path, out_path):
 #   STEP 1
 # ------------------------------------------------------------------------------
 
+
 def check_mature_mirnas(args):
     if args.mature_mirnas:
         if not os.path.exists(args.mature_mirnas):
@@ -183,13 +184,26 @@ def run_triplexator(args):
     print('Triplexator finished its work.')
 
 
+def is_fasta(filename):
+    with open(filename, "r") as handle:
+        fasta = SeqIO.parse(handle, "fasta")
+        return any(fasta)
+
+
 def check_seed_match_needle_specific_args(args):
     if args.genome:
         if not os.path.exists(args.genome):
-            sys.exit('ERROR: ' + args.genome + 'path does not exist.\n')
+            sys.exit('ERROR: ' + args.genome + ' path does not exist.\n')
         elif not os.listdir(args.genome):
-            sys.exit('ERROR: ' + args.genome + 'path is empty. Files with fasta per chromosome of genome of interest'
+            sys.exit('ERROR: ' + args.genome + ' path is empty. Files with fasta per chromosome of genome of interest'
                                                'are expected.\n')
+        else:
+            files = [f for f in os.listdir(args.genome) if os.path.isfile(os.path.join(args.genome, f))]
+            for file in files:
+                if not is_fasta(os.path.join(args.genome, file)):
+                    sys.exit(
+                        'ERROR: ' + args.genome + ' path contains files not in fasta format. Genome files must be'
+                                                  ' in fasta format: 1 chromosome per file.\n')
     else:
         sys.exit('ERROR: Please provide a valid path of directory with fasta files with complete genome of the '
                  'organism of interest: one chromosome per file (argument -g or --genome).\n')
@@ -238,6 +252,19 @@ def run_seed_match_needle(args):
     print("Finished searching for enhancers with miRNAs' seeds sequences.")
 
 
+def check_if_any_seed_match_output_file_not_empty(args):
+    files = [f for f in os.listdir(args.output) if os.path.isfile(os.path.join(args.output, f))
+             if 'enh_with_seeds' in f]
+    all_files_empty = 0
+    for file in files:
+        if os.stat(os.path.join(args.output, file)).st_size == 0:
+            all_files_empty += 1
+            mirna_name = file.split('_')[0]
+            print("The algorithm has found zero encounters of seeds of miRNA " + mirna_name +" in enhancers.")
+    if all_files_empty == len(files):
+        sys.exit("Zero encounters of seeds of all miRNAs in enhancers! Exiting...")
+
+
 # ------------------------------------------------------------------------------
 #   STEP 2
 # ------------------------------------------------------------------------------
@@ -248,6 +275,7 @@ def calc_corr(args):
     print(' '.join(index_cmd))
     subprocess.run(index_cmd)
     print('Calculation is finished. Please find the results in ' + out_file_name)
+
 
 # ------------------------------------------------------------------------------
 #   STEP 3
@@ -510,6 +538,7 @@ def main():
         check_seed_match_needle_specific_args(args)
         tool_installed('bedtools')
         run_seed_match_needle(args)
+        check_if_any_seed_match_output_file_not_empty(args)
     elif args.detection_mir_enh_interaction == 'miranda':
         check_mature_mirnas(args)
         tool_installed('miranda')
